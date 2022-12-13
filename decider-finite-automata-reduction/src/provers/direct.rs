@@ -19,14 +19,20 @@ use crate::core::{
 
 /// A prover which attempts a direct search for a `TapeAutomaton` meeting the proof criteria.
 /// If one exists with at most `depth` DFA states, the prover will find it.
-pub struct DirectProver {
+pub struct MemProver<const MEM: usize, const RIP: bool> {
     /// The DFA size to use.
     depth: usize,
 }
 
-impl Prover for DirectProver {
+impl<const MEM: usize, const RIP: bool> Prover for MemProver<MEM, RIP> {
     fn name(&self) -> String {
-        format!("direct-{}", self.depth)
+        if MEM == 0 {
+            format!("direct-{}", self.depth)
+        } else if RIP {
+            format!("mem{}_rip-{}", MEM, self.depth)
+        } else {
+            format!("mem{}-{}", MEM, self.depth)
+        }
     }
 
     fn prove(&mut self, tm: &Machine) -> Option<Proof> {
@@ -35,13 +41,13 @@ impl Prover for DirectProver {
     }
 }
 
-impl ProverOptions for DirectProver {
+impl<const MEM: usize, const RIP: bool> ProverOptions for MemProver<MEM, RIP> {
     fn new(depth: usize) -> Self {
-        DirectProver { depth }
+        Self { depth }
     }
 }
 
-impl DirectProver {
+impl<const MEM: usize, const RIP: bool> MemProver<MEM, RIP> {
     /// The basic algorithm: try to complete a `TapeAutomaton` from the deterministic part.
     pub fn complete_unverified(tm: &Machine, direction: Side, dfa: DFA) -> Option<Proof> {
         let mut nfa = NFA::new(dfa.len() * TM_STATES + 1);
@@ -58,7 +64,7 @@ impl DirectProver {
 
     /// Try to return a Proof for `tm`, given the choice of scan direction.
     fn prove_side(&mut self, tm: &Machine, direction: Side) -> Option<Proof> {
-        let mut dfas = DFAPrefixIterator::new(self.depth);
+        let mut dfas = DFAPrefixIterator::new(self.depth, MEM, RIP);
         let mut nfas = vec![NFA::new(self.depth * TM_STATES + 1); 2 * self.depth];
         let halt = (TM_STATES * self.depth) as NFAState;
         loop {
@@ -140,3 +146,5 @@ impl DirectProver {
         }
     }
 }
+
+pub type DirectProver = MemProver<0, false>;

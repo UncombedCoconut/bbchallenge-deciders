@@ -1,6 +1,6 @@
 //! A common interface for the actual Proof-finding code.
 
-use super::{DirectProver, MitMDFAProver};
+use super::{DirectProver, MemProver, MitMDFAProver};
 use crate::core::{Machine, Proof, MAX_DFA};
 use std::cmp::{max, min};
 use std::ops::Range;
@@ -45,6 +45,10 @@ pub fn prover_names() -> impl Iterator<Item = String> {
 pub fn prover_range_by_name<S: AsRef<str>>(name: S, range: Range<usize>) -> Vec<ProverBox> {
     match name.as_ref() {
         "direct" => DirectProver::new_range(range),
+        "mem1" => MemProver::<1, false>::new_range(range),
+        "mem1_rip" => MemProver::<1, true>::new_range(range),
+        "mem2" => MemProver::<2, false>::new_range(range),
+        "mem2_rip" => MemProver::<2, true>::new_range(range),
         "mitm_dfa" => MitMDFAProver::new_range(range),
         _ => vec![],
     }
