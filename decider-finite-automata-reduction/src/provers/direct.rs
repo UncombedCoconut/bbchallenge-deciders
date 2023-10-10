@@ -93,9 +93,9 @@ impl DirectProver {
                 dfas.skip_current_subtree();
                 continue;
             }
-            let steady_state = row(halt);
-            let nfa = nfas[ply].clone();
-            if (q_new as usize, s_new) == (self.depth - 1, 1) {
+            if ply + 1 == nfas.len() {
+                let steady_state = row(halt);
+                let nfa = nfas[ply].clone();
                 return Some(Proof::new(direction, dfas.dfa, nfa, steady_state));
             }
         }
@@ -111,9 +111,6 @@ impl DirectProver {
             if let Rule::Halt { f, r } = rule {
                 for q in 0..dfa.len() {
                     nfa.t[r as usize][nfa_start(q as NFAState, f)] |= row(halt);
-                    if r == 0 {
-                        nfa.accepted |= col(nfa_start(q as NFAState, f));
-                    }
                 }
             }
         })
