@@ -9,7 +9,7 @@ use thiserror::Error;
 pub enum BadProof {
     #[error("array lengths did not match")]
     BadDimensions,
-    #[error("indices on a vector (reresented as a binary number) went out of bounds")]
+    #[error("indices on a vector (represented as a binary number) went out of bounds")]
     BadVector,
     #[error("DFA too small to address the initial state")]
     BadDFASize,
@@ -17,10 +17,6 @@ pub enum BadProof {
     BadNFASize,
     #[error("DFA transitions went out of bounds")]
     BadDFATransition,
-    #[error("DFA failed to ignore leading zeros")]
-    LeadingZeroSensitivity,
-    #[error("NFA failed to ignore trailing zeros")]
-    TrailingZeroSensitivity,
     #[error("tape automaton accepted the start configuration")]
     BadStart,
     #[error("closure under {rule} unmet at q={q} (DFA)")]

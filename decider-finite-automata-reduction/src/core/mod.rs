@@ -16,7 +16,9 @@ mod proof;
 pub use algebra::{col, row, ColVector, Matrix, RowVector};
 pub use dfa::DFA;
 pub use error::{BadProof, ProofResult};
-pub use limits::{DFAState, NFAState, NFAStateMask, TMState, MAX_DFA, MAX_NFA, TM_STATES};
+pub use limits::{
+    DFAState, NFAState, NFAStateMask, Symbol, TMState, MAX_DFA, MAX_NFA, SYMBOLS, TM_STATES,
+};
 pub use machine::{Machine, Rule, Side};
 pub use nfa::NFA;
 pub use proof::{nfa_start, Proof, TapeAutomaton};

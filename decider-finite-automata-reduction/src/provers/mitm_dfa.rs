@@ -1,5 +1,5 @@
 //! This prover searches for a simpler form of recognizing automaton:
-//! Consume the tape on both ends with DFAs. Exclude the bit `r` under the head (state `f`).
+//! Consume the tape on both ends with DFAs. Exclude the symbol `r` under the head (state `f`).
 //! When we "meet in the middle", we have a tuple `(qL, f, r, qR)`.
 //! We define a subset of these tuples as accepted, subject to the start/halt/closure rules.
 //! Searching for useful MitM-DFA recognizers can take forever, so we make a SAT solver do it.
@@ -7,31 +7,213 @@
 //! However, it's simpler to hand our DirectProver the left DFA and let it finish.
 //!
 //! The same DFA-pair/SAT technique was pioneered by others in the bbchallenge community:
-//! - @djmati1111 (https://github.com/colette-b/bbchallenge)
-//! - @Mateon1 (https://discuss.bbchallenge.org/u/mateon1)
+//! - Konrad Deka (@djmati1111, https://github.com/colette-b/bbchallenge)
+//! - Mateusz Naściszewski (@Mateon1, https://discuss.bbchallenge.org/u/mateon1)
 
 use super::{DirectProver, Prover, ProverOptions};
-use crate::core::{DFAState, Machine, Proof, Rule, Side, TMState, DFA, TM_STATES};
+use crate::core::{DFAState, Machine, Proof, Rule, Side, Symbol, TMState, DFA, SYMBOLS, TM_STATES};
 use cat_solver::Solver;
-use std::cmp::min;
+use std::cmp::{max, min};
+use std::ops::Range;
+
+// SAT solvers build up to problem definitions in Conjunctive Normal Form (CNF) as follows:
+// A *variable* is represented by a positive `i32`. A *literal* is a variable x or its negation -x.
+// A *clause* is a the disjunction (OR) of some literals, represented here as a list.
+type L = i32;
+const TRUE: L = 1; // It's useful to have an always-true literal
+const FALSE: L = -TRUE; // ... and its opposite.
+
+// To specify a BFS-ordered DFA (cf. `dfa_iterator.rs`) on each side, we use propositions
+// - `dfa_eq(side, q, s, t)` for whether `dfa[side].t[q][s] == t`
+// - `dfa_le(side, q, s, t)` for whether `dfa[side].t[q][s] <= t`
+// - `tmax_eq(side, qs, t)` for whether the max transition value before `qs` is `t`.
+// These propositions get their own variables, except where redundant.
+// This lets our clauses encode the ordering conditions and, crucially, "sequential at-most-one"
+// constraints for each `dfa.t` value. (See https://www.carstensinz.de/papers/CP-2005.pdf:
+// To limit `x` to one value, we encode the rules: `x=k` implies `x≤k` implies `x≤k+1` and `x≠k+1`.)
+const FROM_LEFT: usize = 0;
+const FROM_RIGHT: usize = 1;
 
 /// A prover which searches for "Meet-in-the-Middle DFA" recognizers.
+#[derive(Default)]
 pub struct MitMDFAProver {
-    n: i32,
+    sizes: [usize; 2],
+    dfa_eq_0: [Vec<L>; 2], // [lr][q*SYMBOLS+s] -> base for sequence of dfa_eq(lr, q, s, _) vars.
+    dfa_le_0: [Vec<L>; 2], // [lr][q*SYMBOLS+s] -> base for sequence of dfa_le(lr, q, s, _) vars.
+    tmax_eq_0: [Vec<L>; 2], // [lr][q*SYMBOLS+s] -> base for sequence of tmax_eq(lr, q, s, _) vars.
+}
+
+impl MitMDFAProver {
+    fn dfa_range(&self, lr: usize, q: DFAState, s: Symbol) -> Range<DFAState> {
+        0..min(
+            SYMBOLS as DFAState * q + s as DFAState + 2,
+            self.sizes[lr] as DFAState,
+        )
+    }
+
+    fn dfa_eq(&self, lr: usize, q: DFAState, s: Symbol, t: DFAState) -> L {
+        let r = self.dfa_range(lr, q, s);
+        if !r.contains(&t) {
+            FALSE
+        } else if r.len() == 1 {
+            TRUE
+        } else if r.len() == 2 && t != r.start {
+            -self.dfa_eq(lr, q, s, r.start)
+        } else {
+            self.dfa_eq_0[lr][q as usize * SYMBOLS + s as usize] + t as L
+        }
+    }
+
+    fn dfa_le(&self, lr: usize, q: DFAState, s: Symbol, t: DFAState) -> L {
+        let qs = q as usize * SYMBOLS + s as usize;
+        if t == 0 {
+            self.dfa_eq(lr, q, s, t)
+        } else if (t as usize) <= qs && (t as usize) < self.sizes[lr] - 1 {
+            self.dfa_le_0[lr][qs] + t as L
+        } else {
+            TRUE
+        }
+    }
+
+    fn tmax_range(&self, lr: usize, qs: usize) -> Range<DFAState> {
+        let min_reached = min(qs / SYMBOLS, self.sizes[lr] - 1) as DFAState;
+        let unreachable = min(qs, self.sizes[lr]) as DFAState;
+        min_reached..unreachable
+    }
+
+    fn tmax_eq(&self, lr: usize, qs: usize, t: DFAState) -> L {
+        let r = self.tmax_range(lr, qs);
+        if !r.contains(&t) {
+            FALSE
+        } else if r.len() == 1 {
+            TRUE
+        } else if r.len() == 2 && t != r.start {
+            -self.tmax_eq(lr, qs, r.start)
+        } else {
+            self.tmax_eq_0[lr][qs] + t as L
+        }
+    }
+
+    fn accept(&self, ql: DFAState, f: TMState, r: Symbol, qr: DFAState) -> L {
+        if (ql, f, r, qr) == (0, 0, 0, 0) {
+            FALSE
+        } else {
+            let (il, ir, nl) = (ql as usize, qr as usize, self.sizes[0]);
+            1 + (il + nl * (f as usize + TM_STATES * (r as usize + SYMBOLS * ir))) as L
+        }
+    }
+
+    fn dfa_eval(&self, solver: &Solver, lr: usize, q: DFAState, s: Symbol) -> DFAState {
+        // We have the less-or-equal variables solved, but a linear search is more than fast enough.
+        let r = self.dfa_range(lr, q, s);
+        for t in r.start..r.end - 1 {
+            match solver.value(self.dfa_eq(lr, q, s, t)) {
+                Some(true) | None => return t,
+                Some(false) => {}
+            }
+        }
+        r.end - 1
+    }
+
+    fn init(&mut self, tm: &Machine) -> Solver {
+        let mut sat = Solver::new();
+        sat.add_clause([TRUE]);
+        // DFA transitions:
+        for lr in 0..2 {
+            for q in 0..(self.sizes[lr] as DFAState) {
+                for s in 0..(SYMBOLS as Symbol) {
+                    // Outcomes are mutually exclusive.
+                    for t in 0..(self.sizes[lr] as DFAState) {
+                        sat.add_clause([-self.dfa_eq(lr, q, s, t), self.dfa_le(lr, q, s, t)]);
+                        sat.add_clause([-self.dfa_le(lr, q, s, t), self.dfa_le(lr, q, s, t + 1)]);
+                        sat.add_clause([-self.dfa_eq(lr, q, s, t + 1), -self.dfa_le(lr, q, s, t)]);
+                    }
+                    // An outcome occurs.
+                    sat.add_clause(self.dfa_range(lr, q, s).map(|t| self.dfa_eq(lr, q, s, t)));
+                }
+            }
+        }
+        // Closure conditions:
+        for ql in 0..(self.sizes[0] as DFAState) {
+            for qr in 0..(self.sizes[1] as DFAState) {
+                tm.rules().for_each(|rule| match rule {
+                    Rule::Halt { f, r } => sat.add_clause([self.accept(ql, f, r, qr)]),
+                    Rule::Move { f, r, w, d, t } => {
+                        // If d==Side::R (else symmetric): (s f@r) |- (t@s w), (^ f@r) |- (t@0 w).
+                        let (fwd, rev, n_fwd, n_rev, q_fwd, q_rev) = if d == Side::L {
+                            (FROM_LEFT, FROM_RIGHT, self.sizes[0], self.sizes[1], ql, qr)
+                        } else {
+                            (FROM_RIGHT, FROM_LEFT, self.sizes[1], self.sizes[0], qr, ql)
+                        };
+                        for qs in 0..(n_fwd as DFAState) {
+                            for s in 0..(SYMBOLS as Symbol) {
+                                for qw in 0..(n_rev as DFAState) {
+                                    let (acc_pre, acc_post) = if d == Side::L {
+                                        (self.accept(qs, f, r, q_rev), self.accept(q_fwd, t, s, qw))
+                                    } else {
+                                        (self.accept(q_rev, f, r, qs), self.accept(qw, t, s, q_fwd))
+                                    };
+                                    sat.add_clause([
+                                        -self.dfa_eq(fwd, q_fwd, s, qs),
+                                        -self.dfa_eq(rev, q_rev, w, qw),
+                                        -acc_post,
+                                        acc_pre,
+                                    ]);
+                                    if q_fwd == 0 && s == 0 && qs == 0 {
+                                        sat.add_clause([
+                                            -self.dfa_eq(rev, q_rev, w, qw),
+                                            -acc_post,
+                                            acc_pre,
+                                        ]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        // BFS-ordering, to break symmetries to avoid redundant searches; cf. `dfa_iterator.rs`.
+        // (See also a simpler version in z3py by colette-b/@djmati1111:
+        // https://github.com/colette-b/bbchallenge/blob/main/sat2_cfl.py#L64 plus chat explanation
+        // https://discord.com/channels/960643023006490684/1028746861395316776/1030907938249912431.)
+
+        for lr in 0..2 {
+            for q in 0..(self.sizes[lr] as DFAState) {
+                for s in 0..(SYMBOLS as Symbol) {
+                    let qs = q as usize * SYMBOLS + s as usize;
+                    for m in self.tmax_range(lr, qs) {
+                        sat.add_clause([-self.tmax_eq(lr, qs, m), self.dfa_le(lr, q, s, m + 1)]);
+                        sat.add_clause([
+                            -self.tmax_eq(lr, qs, m),
+                            -self.dfa_le(lr, q, s, m),
+                            self.tmax_eq(lr, qs + 1, m),
+                        ]);
+                        sat.add_clause([
+                            -self.tmax_eq(lr, qs, m),
+                            -self.dfa_eq(lr, q, s, m + 1),
+                            self.tmax_eq(lr, qs + 1, m + 1),
+                        ]);
+                    }
+                }
+            }
+        }
+        sat
+    }
 }
 
 impl Prover for MitMDFAProver {
     fn name(&self) -> String {
-        format!("mitm_dfa-{}", self.n)
+        format!("mitm_dfa-{}", max(self.sizes[0], self.sizes[1]))
     }
 
     fn prove(&mut self, tm: &Machine) -> Option<Proof> {
-        let mut solver = self.init(self.n, tm);
+        let mut solver = self.init(tm);
         if solver.solve() == Some(true) {
-            let mut dfa = DFA::new(self.n as usize);
+            let mut dfa = DFA::new(self.sizes[0]);
             for q in 0..dfa.len() {
-                for b in 0..2 {
-                    dfa.t[q][b] = self.dfa_eval(&solver, FROM_LEFT, q as DFAState, b as u8);
+                for s in 0..SYMBOLS {
+                    dfa.t[q][s] = self.dfa_eval(&solver, FROM_LEFT, q as DFAState, s as Symbol);
                 }
             }
             DirectProver::complete_unverified(tm, Side::R, dfa)
@@ -43,186 +225,24 @@ impl Prover for MitMDFAProver {
 
 impl ProverOptions for MitMDFAProver {
     fn new(depth: usize) -> Self {
-        MitMDFAProver { n: depth as L }
-    }
-}
-
-// SAT solvers speak CNF: *literals* are + `i32`s (variables) and their negations (-x means NOT x).
-// Lists represent disjunctions (OR); the conjunction (AND) of all added clauses must be true.
-// When it's not ludicrous, we pack the conditions of interest tightly into a sequence of variables.
-// When I represent "the" result of a TM or DFA transition, I use sequential at-most-one conditions.
-// That is, `eq`/`le` variables represent the outcome being `=`/`<=` each fixed value, with rules:
-// `x = k` implies `x <= k` implies `x <= k+1` and `x != k+1`.
-// See also: https://www.carstensinz.de/papers/CP-2005.pdf
-
-type L = i32;
-const TRUE: L = 1;
-const FALSE: L = -TRUE;
-const T: L = TM_STATES as L;
-const FROM_LEFT: L = 0;
-const FROM_RIGHT: L = 1;
-
-/// Number of lattice points in the trapezoid `0 <= y < min(x, h)`, `0 <= x < b`.
-fn a(b: L, h: L) -> L {
-    let s = min(b, h);
-    (s * (s - 1)) / 2 + (b - s) * h
-}
-
-#[rustfmt::skip]
-impl MitMDFAProver {
-    fn _dfa_t_eq(n: L, lr: L, qb: L, t: L) -> L { lr + 2*(qb-1 + a(2*n  , t  )) + 2 }
-    fn _dfa_t_le(n: L, lr: L, qb: L, t: L) -> L { lr + 2*(qb-2 + a(2*n-2, t-1)) + n*(1+3*n) }
-    fn _accepted(n: L, ql: L, f: L, r: L, qr: L) -> L { ql + n*(f + T*(r + 2*qr)) + 6*n*(n-1) + 1 }
-    fn _aux_var0(n: L) -> L { n*T*2*n + 6*n*(n-1) + 1 }
-}
-
-impl MitMDFAProver {
-    fn dfa(&self, lr: i32, q: DFAState, b: u8, t: L) -> L {
-        let qb = 2 * (q as L) + (b as L);
-        if (qb, t) == (0, 0) {
-            TRUE
-        } else if 0 <= t && t <= qb && t < self.n {
-            Self::_dfa_t_eq(self.n, lr, qb, t)
-        } else {
-            FALSE
-        }
-    }
-
-    fn dfa_le(&self, lr: i32, q: DFAState, b: u8, t: L) -> L {
-        let qb = 2 * (q as L) + (b as L);
-        if t <= 0 {
-            self.dfa(lr, q, b, t)
-        } else if t < qb && t < self.n - 1 {
-            Self::_dfa_t_le(self.n, lr, qb, t)
-        } else {
-            TRUE
-        }
-    }
-
-    fn accept(&self, ql: DFAState, f: TMState, r: u8, qr: DFAState) -> L {
-        if (ql, f, r, qr) == (0, 0, 0, 0) {
-            FALSE
-        } else {
-            Self::_accepted(self.n, ql as L, f as L, r as L, qr as L)
-        }
-    }
-
-    fn dfa_eval(&self, solver: &Solver, lr: i32, q: DFAState, b: u8) -> DFAState {
-        // We have the less-or-equal variables solved, but a linear search is more than fast enough.
-        let max_val = (self.n - 1) as DFAState;
-        for t in 0..max_val {
-            match solver.value(self.dfa(lr, q, b, t as L)) {
-                Some(true) | None => return t,
-                Some(false) => {}
-            }
-        }
-        max_val
-    }
-
-    fn init(&mut self, n: L, tm: &Machine) -> Solver {
-        let mut solver = Solver::new();
-        solver.add_clause([TRUE]);
-        // DFA transitions:
+        let mut p: MitMDFAProver = Default::default();
+        p.sizes.fill(depth);
+        let mut used = p.sizes[0] * TM_STATES * SYMBOLS * p.sizes[1]; // accept() vars, overlapping TRUE
         for lr in 0..2 {
-            for q in 0..(n as DFAState) {
-                for b in 0..2 {
-                    // Outcomes are mutually exclusive.
-                    for t in 0..n {
-                        solver.add_clause([-self.dfa(lr, q, b, t), self.dfa_le(lr, q, b, t)]);
-                        solver
-                            .add_clause([-self.dfa_le(lr, q, b, t), self.dfa_le(lr, q, b, t + 1)]);
-                        solver.add_clause([-self.dfa(lr, q, b, t + 1), -self.dfa_le(lr, q, b, t)]);
-                    }
-                    // An outcome occurs.
-                    if (q, b) != (0, 0) {
-                        let tmax = min(2 * (q as L) + (b as L) + 1, n);
-                        solver.add_clause((0..tmax).map(|t| self.dfa(lr, q, b, t)));
-                    }
+            for q in 0..(p.sizes[lr] as DFAState) {
+                for s in 0..(SYMBOLS as Symbol) {
+                    let qs = q as usize * SYMBOLS + s as usize;
+                    let r = p.dfa_range(lr, q, s);
+                    p.dfa_eq_0[lr].push(used as L + 1 - r.start as L);
+                    used += r.len() - if (1..=2).contains(&r.len()) { 1 } else { 0 };
+                    p.dfa_le_0[lr].push(used as L + 1 - (r.start + 1) as L);
+                    used += r.len().saturating_sub(2);
+                    let r = p.tmax_range(lr, qs);
+                    p.tmax_eq_0[lr].push(used as L + 1 - r.start as L);
+                    used += r.len() - if (1..=2).contains(&r.len()) { 1 } else { 0 };
                 }
             }
         }
-        // Closure conditions:
-        for ql in 0..(n as DFAState) {
-            for qr in 0..(n as DFAState) {
-                tm.rules().for_each(|rule| match rule {
-                    Rule::Halt { f, r } => solver.add_clause([self.accept(ql, f, r, qr)]),
-                    Rule::Move { f, r, w, d, t } => {
-                        for b in 0..2 {
-                            for qw in 0..(n as DFAState) {
-                                for qb in 0..(n as DFAState) {
-                                    if d == Side::L {
-                                        // Transition: b f@r -> t@b w
-                                        solver.add_clause([
-                                            -self.dfa(FROM_LEFT, ql, b, qb as L),
-                                            -self.dfa(FROM_RIGHT, qr, w, qw as L),
-                                            -self.accept(ql, t, b, qw),
-                                            self.accept(qb, f, r, qr),
-                                        ]);
-                                    } else {
-                                        // Transition: f@r b -> w t@b
-                                        solver.add_clause([
-                                            -self.dfa(FROM_RIGHT, qr, b, qb as L),
-                                            -self.dfa(FROM_LEFT, ql, w, qw as L),
-                                            -self.accept(qw, t, b, qr),
-                                            self.accept(ql, f, r, qb),
-                                        ]);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-            }
-        }
-        // DFA ordering criteria: as in dfa_iterator.rs, we impose an ordering criterion, which
-        // forces the states to appear in order in each DFA's transition table.
-        // This saves the solver from considering DFAs with unused states or relabels of prior DFAs.
-        // (See also a simpler version in z3py by colette-b/@djmati1111:
-        // https://github.com/colette-b/bbchallenge/blob/main/sat2_cfl.py#L64 plus chat explanation
-        // https://discord.com/channels/960643023006490684/1028746861395316776/1030907938249912431.)
-        // As in dfa_iterator.rs, for each qb>0, define `tmax[qb] = max{dfa.t[q][b] | 2*q+b < qb}`.
-        // `tmax[qb]` is `>= qb/2` (this state must be reachable) and `< min(n, qb)`
-        // (transition values can't go out of bounds or increase at a rate above 1).
-
-        // Let's set up variables for the L/R `tmax[qb] == m`, with index base[qb]+lr+2*m.
-        let mut base = vec![Self::_aux_var0(n); 2 * n as usize];
-        for qb in 1..(2 * n as usize) {
-            let choices = min(n as usize, qb) - (qb / 2) + 1;
-            if choices > 1 && qb + 1 < 2 * (n as usize) {
-                base[qb + 1] = base[qb] + 2 * (choices as L);
-            }
-            base[qb] -= 2 * (qb as L / 2);
-        }
-        fn tmax_eq(n: L, lr: L, qb: L, m: L, base: &[L]) -> L {
-            if (qb, m) == (2 * n, n - 1) {
-                TRUE
-            } else if m < (qb / 2) || m >= min(n, qb) {
-                FALSE
-            } else if min(n, qb) - (qb / 2) <= 1 {
-                TRUE
-            } else {
-                base[qb as usize] + lr + 2 * m
-            }
-        }
-        for qb in 1..2 * n {
-            let (q, b) = ((qb / 2) as DFAState, (qb % 2) as u8);
-            for m in qb / 2..min(n, qb) {
-                for lr in 0..2 {
-                    solver
-                        .add_clause([-tmax_eq(n, lr, qb, m, &base), self.dfa_le(lr, q, b, m + 1)]);
-                    solver.add_clause([
-                        -tmax_eq(n, lr, qb, m, &base),
-                        -self.dfa_le(lr, q, b, m),
-                        tmax_eq(n, lr, qb + 1, m, &base),
-                    ]);
-                    solver.add_clause([
-                        -tmax_eq(n, lr, qb, m, &base),
-                        -self.dfa(lr, q, b, m + 1),
-                        tmax_eq(n, lr, qb + 1, m + 1, &base),
-                    ]);
-                }
-            }
-        }
-        solver
+        p
     }
 }

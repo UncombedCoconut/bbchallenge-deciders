@@ -8,7 +8,7 @@ mod direct;
 mod mitm_dfa;
 mod prover;
 
-pub use dfa_iterator::{DFAIterator, DFAPrefixIterator};
+pub use dfa_iterator::DFAPrefixIterator;
 pub use direct::DirectProver;
 pub use mitm_dfa::MitMDFAProver;
 pub use prover::{

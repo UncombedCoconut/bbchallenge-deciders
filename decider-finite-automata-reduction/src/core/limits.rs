@@ -1,5 +1,7 @@
 //! Define up the hard, compile-time limits on our `BB(_)` problem and search space.
 
+/// The size of a Turing machine's tape alphabet.
+pub const SYMBOLS: usize = 2;
 /// The exact number of states we expect from Turing Machines.
 pub const TM_STATES: usize = 5;
 /// The maximum number of states in a Proof's DFA.
@@ -7,6 +9,8 @@ pub const MAX_DFA: usize = if cfg!(feature = "u128") { 25 } else { 12 };
 /// The maximum number of states in a Proof's NFA.
 pub const MAX_NFA: usize = if cfg!(feature = "u128") { 128 } else { 64 };
 
+/// A TM tape symbol.
+pub type Symbol = u8;
 /// A number indexing a TM state.
 pub type TMState = u8;
 /// A number indexing a DFA state.
@@ -26,6 +30,10 @@ mod tests {
 
     #[test]
     fn test_consistency() {
+        assert!(
+            (1..=10).contains(&SYMBOLS),
+            "Need tape alphabet with a 0 symbol and compatible with the standard text format"
+        );
         assert!(TMState::MAX as usize + 1 >= TM_STATES);
         assert!(DFAState::MAX as usize + 1 >= MAX_DFA);
         assert!(NFAState::MAX as usize + 1 >= MAX_NFA);

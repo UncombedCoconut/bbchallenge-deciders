@@ -1,4 +1,4 @@
-use super::{row, BadProof, ColVector, Matrix, NFAState, ProofResult, RowVector};
+use super::{row, BadProof, ColVector, Matrix, NFAState, ProofResult, RowVector, Symbol, SYMBOLS};
 use serde::{Deserialize, Serialize};
 
 /// A Nondeterministic Finite Automaton, with states indexed by `NFAState`s.
@@ -27,13 +27,13 @@ impl NFA {
     }
 
     /// The outcomes of a single step, from a precise state.
-    pub fn step(&self, q: NFAState, b: u8) -> RowVector {
-        self.step_vec(row(q), b)
+    pub fn step(&self, q: NFAState, s: Symbol) -> RowVector {
+        self.step_vec(row(q), s)
     }
 
     /// The outcomes of a single step, from any state in a vector.
-    pub fn step_vec(&self, v: RowVector, b: u8) -> RowVector {
-        v * &self.t[b as usize]
+    pub fn step_vec(&self, v: RowVector, s: Symbol) -> RowVector {
+        v * &self.t[s as usize]
     }
 
     /// Ensure the data define a valid NFA.
@@ -46,24 +46,15 @@ impl NFA {
         }
     }
 
-    /// Ensure the NFA reaches the same decision independent of any trailing zeros.
-    pub fn check_trailing_zeros(&self) -> ProofResult<()> {
-        if &self.t[0] * self.accepted == self.accepted {
-            Ok(())
-        } else {
-            Err(BadProof::TrailingZeroSensitivity)
-        }
-    }
-
     /// Check the assumption that `v` is an "accepted steady state", meaning:
     /// - if the NFA currently reaches all states in `v` (`state >= v`), this remains true after
-    ///   either transition (`state * &self.t[b] >= v` for each bit `b`).
+    ///   either transition (`state * &self.t[s] >= v` for each symbol `s`).
     /// - in a state where all of `v` is reachable, the NFA will accept.
     pub fn check_accepted_steady_state(&self, v: RowVector) -> ProofResult<()> {
         v.validate(self.len())?;
         if !(v * self.accepted) {
             Err(BadProof::RejectedSteadyState)
-        } else if !(v * &self.t[0] >= v && v * &self.t[1] >= v) {
+        } else if !(0..SYMBOLS).all(|s| v * &self.t[s] >= v) {
             Err(BadProof::BadSteadyState)
         } else {
             Ok(())
@@ -87,22 +78,6 @@ mod tests {
         assert_eq!(nfa.validate(), Err(BadProof::BadDimensions));
         let nfa: NFA = serde_json::from_str(r#"{"t":[[4],[2]],"accepted":0}"#).unwrap();
         assert_eq!(nfa.validate(), Err(BadProof::BadVector));
-    }
-
-    #[test]
-    fn test_check_trailing_zeros() {
-        // all looping transitions: yes.
-        let nfa: NFA = serde_json::from_str(r#"{"t":[[1,2],[1,2]],"accepted":1}"#).unwrap();
-        assert_eq!(nfa.check_trailing_zeros(), Ok(()));
-        // all looping transitions except 0->1 when reading '1': yes.
-        let nfa: NFA = serde_json::from_str(r#"{"t":[[1,2],[2,2]],"accepted":1}"#).unwrap();
-        assert_eq!(nfa.check_trailing_zeros(), Ok(()));
-        // all looping transitions except 0->1 when reading '0': no!
-        let nfa: NFA = serde_json::from_str(r#"{"t":[[2,2],[1,2]],"accepted":1}"#).unwrap();
-        assert_eq!(
-            nfa.check_trailing_zeros(),
-            Err(BadProof::TrailingZeroSensitivity)
-        );
     }
 
     #[test]

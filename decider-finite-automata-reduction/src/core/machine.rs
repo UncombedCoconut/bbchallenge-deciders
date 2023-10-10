@@ -1,7 +1,6 @@
 //! A Turing Machine definition which matches the bbchallenge.org database format.
 
-use super::TM_STATES;
-use crate::core::TMState;
+use super::{Symbol, TMState, SYMBOLS, TM_STATES};
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::fmt::{Display, Formatter};
@@ -13,7 +12,7 @@ use zerocopy::{AsBytes, FromBytes};
 #[derive(AsBytes, FromBytes, Clone, Debug, Default, Eq, PartialEq)]
 #[repr(C)]
 struct Trans {
-    bit: u8,
+    sym: u8,
     dir: u8,
     new: u8,
 }
@@ -27,11 +26,14 @@ impl FromStr for Trans {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut chars = s.chars();
-        let bit = match chars.next() {
-            Some('-') | Some('0') => 0u8,
-            Some('1') => 1u8,
+        let sym = match chars.next() {
+            Some('-') => 0 as Symbol,
+            Some(c) if c.is_ascii_digit() => (c as u32 - '0' as u32) as Symbol,
             _ => return Err(BadTMText {}),
         };
+        if sym as usize >= SYMBOLS {
+            return Err(BadTMText {});
+        }
         let dir = match chars.next() {
             Some('-') | Some('R') => 0u8,
             Some('L') => 1u8,
@@ -41,7 +43,7 @@ impl FromStr for Trans {
             Some(b36) if b36 > 9 => (b36 - 9) as u8,
             _ => 0u8,
         };
-        Ok(Trans { bit, dir, new })
+        Ok(Trans { sym, dir, new })
     }
 }
 
@@ -53,7 +55,7 @@ impl Display for Trans {
             write!(
                 f,
                 "{}{}{}",
-                self.bit,
+                self.sym,
                 if self.dir == 0 { 'R' } else { 'L' },
                 char::from_digit(self.new as u32 + 9, 36)
                     .unwrap_or('?')
@@ -114,7 +116,7 @@ impl Machine {
             if trans.new == 0 {
                 Rule::Halt { f, r }
             } else {
-                let w = trans.bit;
+                let w = trans.sym;
                 let d = if trans.dir == 0 { Side::R } else { Side::L };
                 let t = trans.new - 1;
                 Rule::Move { f, r, w, d, t }

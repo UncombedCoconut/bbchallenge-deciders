@@ -1,3 +1,8 @@
+# Warning: docs need to be updated.
+This branch does a "visit-tracking" version of the algorithm, which is slower and more powerful.
+See [this Discord post](https://discord.com/channels/960643023006490684/1028746861395316776/1157082400761860136) for an intro.
+Decider Verification Files emitted by this program version will use a different ID, since they need a modified verifier.
+
 # [Decider] Finite Automata Reduction
 
 ## Usage
@@ -65,6 +70,7 @@ The default build options work only for BB(5) and up to search depths of 12, and
 To double the depth limit (at the cost of some speed), add `--features u128` to the `cargo build` / `cargo run` command lines.
 To change the number of TM states, edit `src/limits.rs`. The program will expect a seed DB format with a corresponding number of bytes per machine.
 Beware, some unit tests assume `TM_STATES == 5`, and nearly all testing has been in BB(5) mode.
+Similarly, to change the number of tape symbols, update the `SYMBOLS` value in the same file, but beware of unit tests assuming the default value of 2.
 
 To speed up the `direct` prover dramatically at most depths, build `--features sink_heuristic`.
 The effect is to reduce the search space in a way that leads to a few false negatives (TMs only proven at later iterations than necessary), but *much* faster search iterations.
@@ -253,5 +259,5 @@ There are two ways to connect this construction back to the DFA+NFA construction
 The decider in `mitm_dfa.rs` follows on a path first set by others — see there for details — and sets up the closure conditions for the MitM-DFA as a boolean satisfiability problem.
 Thanks and credit go to:
 
-- @djmati1111 (https://github.com/colette-b/bbchallenge)
-- @Mateon1 (https://discuss.bbchallenge.org/u/mateon1)
+- Konrad Deka (@djmati1111, https://github.com/colette-b/bbchallenge)
+- Mateusz Naściszewski (@Mateon1, https://discuss.bbchallenge.org/u/mateon1)
