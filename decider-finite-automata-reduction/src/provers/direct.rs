@@ -59,7 +59,8 @@ impl DirectProver {
 
     /// Try to return a Proof for `tm`, given the choice of scan direction.
     fn prove_side(&mut self, tm: &Machine, direction: Side) -> Option<Proof> {
-        let greatest_pow2_bound = 1usize << (8 * usize::BITS - self.depth.leading_zeros() - 1);
+        let greatest_pow2_bound =
+            1usize << (8 * usize::BITS.saturating_sub(self.depth.leading_zeros() + 1));
         let mut dfas = DFAPrefixIterator::new(self.depth);
         let mut nfas = vec![NFA::new(self.depth * TM_STATES + 1); SYMBOLS * self.depth + 1];
         let mut initial_non_sink_states = 0;
