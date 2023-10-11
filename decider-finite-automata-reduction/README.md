@@ -2,6 +2,7 @@
 This branch does a "visit-tracking" version of the algorithm, which is slower and more powerful.
 See [this Discord post](https://discord.com/channels/960643023006490684/1028746861395316776/1157082400761860136) for an intro.
 Decider Verification Files emitted by this program version will use a different ID, since they need a modified verifier.
+Building with `--features fix_zero` will mostly restore the original behavior, though the implementation will still differ from the bbchallenge-proofs paper.
 
 # [Decider] Finite Automata Reduction
 

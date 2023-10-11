@@ -99,6 +99,9 @@ impl DirectProver {
                 let nfa = nfas[ply].clone();
                 return Some(Proof::new(direction, dfas.dfa, nfa, steady_state));
             }
+            if cfg!(feature = "fix_zero") && ply == 1 && dfas.dfa.t[0][0] > 0 {
+                return None;
+            }
         }
     }
 

@@ -33,6 +33,7 @@ const FALSE: L = -TRUE; // ... and its opposite.
 // To limit `x` to one value, we encode the rules: `x=k` implies `x≤k` implies `x≤k+1` and `x≠k+1`.)
 const FROM_LEFT: usize = 0;
 const FROM_RIGHT: usize = 1;
+const MAX_FIRST_TRANSITION: DFAState = if cfg!(feature = "fix_zero") { 0 } else { 1 };
 
 /// A prover which searches for "Meet-in-the-Middle DFA" recognizers.
 #[derive(Default)]
@@ -46,7 +47,7 @@ pub struct MitMDFAProver {
 impl MitMDFAProver {
     fn dfa_range(&self, lr: usize, q: DFAState, s: Symbol) -> Range<DFAState> {
         0..min(
-            SYMBOLS as DFAState * q + s as DFAState + 2,
+            SYMBOLS as DFAState * q + s as DFAState + MAX_FIRST_TRANSITION + 1,
             self.sizes[lr] as DFAState,
         )
     }
@@ -77,7 +78,7 @@ impl MitMDFAProver {
 
     fn tmax_range(&self, lr: usize, qs: usize) -> Range<DFAState> {
         let min_reached = min(qs / SYMBOLS, self.sizes[lr] - 1) as DFAState;
-        let unreachable = min(qs + 1, self.sizes[lr]) as DFAState;
+        let unreachable = min(qs + MAX_FIRST_TRANSITION as usize, self.sizes[lr]) as DFAState;
         min_reached..unreachable
     }
 
