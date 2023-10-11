@@ -24,8 +24,8 @@ pub struct BadTMText;
 impl FromStr for Trans {
     type Err = BadTMText;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut chars = s.chars();
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let mut chars = text.chars();
         let sym = match chars.next() {
             Some('-') => 0 as Symbol,
             Some(c) if c.is_ascii_digit() => (c as u32 - '0' as u32) as Symbol,
@@ -71,7 +71,7 @@ impl Display for Trans {
 )]
 #[repr(C)]
 pub struct Machine {
-    code: [[Trans; 2]; TM_STATES],
+    code: [[Trans; SYMBOLS]; TM_STATES],
 }
 
 /// Left or right.
@@ -112,7 +112,7 @@ impl Display for Rule {
 impl Machine {
     pub fn rules(&self) -> impl Iterator<Item = Rule> + '_ {
         self.code.iter().flatten().enumerate().map(|(fr, trans)| {
-            let (f, r) = ((fr / 2) as TMState, (fr % 2) as u8);
+            let (f, r) = ((fr / SYMBOLS) as TMState, (fr % SYMBOLS) as u8);
             if trans.new == 0 {
                 Rule::Halt { f, r }
             } else {
@@ -128,12 +128,13 @@ impl Machine {
 impl FromStr for Machine {
     type Err = BadTMText;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
         let mut tm = Machine::default();
-        for i in 0..TM_STATES {
-            for b in 0..2 {
-                if let Some(t) = s.get(7 * i + 3 * b..7 * i + 3 * (b + 1)) {
-                    tm.code[i][b] = Trans::from_str(t)?;
+        for r in 0..TM_STATES {
+            for s in 0..SYMBOLS {
+                if let Some(t) = text.get(r + 3 * (SYMBOLS * r + s)..r + 3 * (SYMBOLS * r + s + 1))
+                {
+                    tm.code[r][s] = Trans::from_str(t)?;
                 } else {
                     return Err(BadTMText {});
                 }

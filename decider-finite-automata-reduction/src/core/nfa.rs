@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 /// Reference: https://planetmath.org/matrixcharacterizationsofautomata
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NFA {
-    pub t: [Matrix; 2],
+    pub t: [Matrix; SYMBOLS],
     pub accepted: ColVector,
 }
 
@@ -16,7 +16,7 @@ impl NFA {
     /// An NFA with n states (initialized empty transitions and acceptance).
     pub fn new(states: usize) -> NFA {
         NFA {
-            t: [Matrix::new(states), Matrix::new(states)],
+            t: core::array::from_fn(|_| Matrix::new(states)),
             accepted: ColVector::new(),
         }
     }

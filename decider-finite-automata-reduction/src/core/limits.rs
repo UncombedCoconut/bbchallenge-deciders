@@ -4,10 +4,10 @@
 pub const SYMBOLS: usize = 2;
 /// The exact number of states we expect from Turing Machines.
 pub const TM_STATES: usize = 5;
-/// The maximum number of states in a Proof's DFA.
-pub const MAX_DFA: usize = if cfg!(feature = "u128") { 25 } else { 12 };
 /// The maximum number of states in a Proof's NFA.
 pub const MAX_NFA: usize = if cfg!(feature = "u128") { 128 } else { 64 };
+/// The maximum number of states in a Proof's DFA.
+pub const MAX_DFA: usize = MAX_NFA / TM_STATES;
 
 /// A TM tape symbol.
 pub type Symbol = u8;
