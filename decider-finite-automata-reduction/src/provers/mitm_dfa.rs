@@ -65,11 +65,11 @@ impl MitMDFAProver {
     }
 
     fn dfa_le(&self, lr: usize, q: DFAState, s: Symbol, t: DFAState) -> L {
-        let qs = q as usize * SYMBOLS + s as usize;
-        if t == 0 {
+        let r = self.dfa_range(lr, q, s);
+        if t <= r.start {
             self.dfa_eq(lr, q, s, t)
-        } else if (t as usize) <= qs && (t as usize) < self.sizes[lr] - 1 {
-            self.dfa_le_0[lr][qs] + t as L
+        } else if t + 1 < r.end {
+            self.dfa_le_0[lr][q as usize * SYMBOLS + s as usize] + t as L
         } else {
             TRUE
         }
@@ -77,7 +77,7 @@ impl MitMDFAProver {
 
     fn tmax_range(&self, lr: usize, qs: usize) -> Range<DFAState> {
         let min_reached = min(qs / SYMBOLS, self.sizes[lr] - 1) as DFAState;
-        let unreachable = min(qs, self.sizes[lr]) as DFAState;
+        let unreachable = min(qs + 1, self.sizes[lr]) as DFAState;
         min_reached..unreachable
     }
 
