@@ -23,6 +23,8 @@ use crate::core::{
 pub struct DirectProver {
     /// The DFA size to use.
     depth: usize,
+    /// If using the "sink heuristic": expect a state <= this bound to transition only to itself.
+    max_sink_state: usize,
 }
 
 impl Prover for DirectProver {
@@ -38,7 +40,8 @@ impl Prover for DirectProver {
 
 impl ProverOptions for DirectProver {
     fn new(depth: usize) -> Self {
-        DirectProver { depth }
+        let max_sink_state = SYMBOLS.pow(depth.ilog(SYMBOLS));
+        DirectProver { depth, max_sink_state }
     }
 }
 
@@ -59,8 +62,6 @@ impl DirectProver {
 
     /// Try to return a Proof for `tm`, given the choice of scan direction.
     fn prove_side(&mut self, tm: &Machine, direction: Side) -> Option<Proof> {
-        let greatest_pow2_bound =
-            1usize << (8 * usize::BITS.saturating_sub(self.depth.leading_zeros() + 1));
         let mut dfas = DFAPrefixIterator::new(self.depth);
         let mut nfas = vec![NFA::new(self.depth * TM_STATES + 1); SYMBOLS * self.depth + 1];
         let mut initial_non_sink_states = 0;
@@ -73,7 +74,7 @@ impl DirectProver {
             if cfg!(feature = "sink_heuristic") {
                 // Heuristic: Nearly all solutions have a "sink state" transitioning only to itself,
                 // typically recognizing a pattern the TM never writes in its infinite lifetime.
-                // Our DFAs are ordered breadth-first, so one may assume one of the first ~2^k
+                // Our DFAs are ordered breadth-first, so one may assume one of the first ~SYMBOLS^k
                 // states should find one. This saves A LOT of time and, when wrong, can be fixed
                 // by a higher-depth search. The exact threshold was chosen empirically and saves
                 // far more time than it loses on higher-depth re-searches.
@@ -84,7 +85,7 @@ impl DirectProver {
                 {
                     initial_non_sink_states += 1;
                 }
-                if initial_non_sink_states > greatest_pow2_bound {
+                if initial_non_sink_states > self.max_sink_state {
                     dfas.skip_current_subtree();
                     continue;
                 }
