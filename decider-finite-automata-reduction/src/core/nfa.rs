@@ -39,7 +39,7 @@ impl NFA {
     /// Ensure the data define a valid NFA.
     pub fn validate(&self) -> ProofResult<()> {
         self.accepted.validate(self.len())?;
-        if self.t[1].len() != self.len() {
+        if self.t.iter().any(|t| t.len() != self.len()) {
             Err(BadProof::BadDimensions)
         } else {
             self.t.iter().try_for_each(|m| m.validate())
@@ -65,7 +65,6 @@ impl NFA {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::NFAState;
 
     #[test]
     fn test_validation() {
