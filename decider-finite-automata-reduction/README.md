@@ -1,9 +1,3 @@
-# Warning: docs need to be updated.
-This branch does a "visit-tracking" version of the algorithm, which is slower and more powerful.
-See [this Discord post](https://discord.com/channels/960643023006490684/1028746861395316776/1157082400761860136) for an intro.
-Decider Verification Files emitted by this program version will use a different ID, since they need a modified verifier.
-Building with `--features fix_zero` will mostly restore the original behavior, though the implementation will still differ from the bbchallenge-proofs paper.
-
 # [Decider] Finite Automata Reduction
 
 ## Usage
@@ -13,7 +7,6 @@ To build it and view usage options, [install Rust](https://www.rust-lang.org/lea
 ```
 $ cargo run --release -- --help
    ...
-     Running `target/release/decider-finite-automata-reduction --help`
 Usage: decider-finite-automata-reduction [-p <prover...>] [-l <limit...>] [-x <exclude...>] [-s] [--ip <ip>] [--port <port>] [-a <ad-hoc...>] [-d <db>] [-i <index>]
 
 Decide TMs, using finite-state recognizers for their halting configurations.
@@ -73,9 +66,13 @@ To change the number of TM states, edit `src/limits.rs`. The program will expect
 Beware, some unit tests assume `TM_STATES == 5`, and nearly all testing has been in BB(5) mode.
 Similarly, to change the number of tape symbols, update the `SYMBOLS` value in the same file, but beware of unit tests assuming the default value of 2.
 
-To speed up the `direct` prover dramatically at most depths, build `--features sink_heuristic`.
-The effect is to reduce the search space in a way that leads to a few false negatives (TMs only proven at later iterations than necessary), but *much* faster search iterations.
-Overall, this means TMs are solved in less time. The reason this isn't the default is that the algorithm is clearer and more easily reproduced without it.
+To speed up the `direct` prover dramatically at most depths, build with `--features sink_heuristic`.
+The effect is to reduce the search space in a way that leads to a few false negatives (TMs proven only at later iterations than necessary), but *much* faster search iterations.
+Overall, this means TMs are solved in less time. The reason this isn't the default is to simplify the algorithm in the paper and for reproducers.
+
+Disabling the `fix_zero` feature via `--no-default-features` makes an opposite trade-off, by switching to a more general "visit-tracking" version of FAR.
+The price is a severe speed penalty in the proof search, and incompatibility with `.dvf`-file verifiers designed for the original proof conditions.
+The upside is that a few TMs gain proofs at lower depth.
 
 ## How it works: practice
 
@@ -96,34 +93,44 @@ The BB Challenge community sometimes calls this a "co-CTL" proof. More on that l
 Now for the definitions. The below is also expressed as commented Rust code, in `src/proof.rs`.
 
 1. Define a finite-state machine of the following form, whose job is to scan TM configurations (WLOG left to right) and "recognize" some of them:
-    1. Start "at the end" — on an infinite, this means an arbitrary position left of the head and the tape's finite non-zero-filled part.
-    2. Read the tape as a [DFA (Q, Σ={0,1}, δ, q₀)](https://en.wikipedia.org/wiki/Deterministic_finite_automaton) up to (but excluding) the head position.
-       To ensure the end state is well-defined, we require the DFA to ignore leading zeros, i.e., that δ(q₀, 0) = q₀.
-    3. Transition to an [NFA (Q', Σ'={0,1}, δ', F)](https://en.wikipedia.org/wiki/Nondeterministic_finite_automata) whose state space Q' includes QˣQ™,
-       i.e., has a specific NFA state (q, F) for whichever DFA end-state q and TM head-state F we get.
-    4. Read the tape as an NFA, starting with the symbol under the TM head and "until the end".
-       The TM configuration is *recognized* if the NFA can "end" in a state belonging to F.
-       We again take the "end" to be an arbitrary point beyond all nonzero content.
-       We again require that the choice of "end" doesn't matter, i.e., that the image δ(F, 0) equals F.
-2. Also designate a *steady state* S⊆Q', i.e., a set of states such that δ(S, 0)⊇S and δ(S, 1)⊇S, which furthermore contains at least one state from F.
+    1. Start at the leftmost tape cell which the TM has visited.
+    2. Read the tape as a [DFA (Q, Σ, δ, q₀)](https://en.wikipedia.org/wiki/Deterministic_finite_automaton) up to (but excluding) the head position.
+    3. Transition to an [NFA (Q', Σ, δ', F)](https://en.wikipedia.org/wiki/Nondeterministic_finite_automata) whose state space Q' includes QˣQ™,
+       i.e., has a specific NFA state (q, f) for whichever DFA end-state q and TM head-state f we get.
+    4. Read the tape as an NFA, reading all symbols from the head position onward that the TM has written.
+       The TM configuration is *recognized* if there's a possible end state belonging to F.
+2. Also designate a *steady state* S⊆Q', i.e., a set of states such that δ'(S, s)⊇S for any symbol s∈Σ, which furthermore contains at least one state from F.
    In other words, if at any step the NFA could have reached all of S, that's also true on the next step and the configuration will ultimately be recognized.
 3. Define the *closure* properties which effectively say, if the configuration after a TM step is recognized, the configuration before it is too:
-    - In case of a right transition (r, F) ↦ (w, **R**, T), whose effect on the tape is to change the sequence `F@r` to `w T@`:
-      ∀q∈Q: δ'((q, F), r) ∋ (δ(q, w), T).
-    - In case of a left transition (r, F) ↦ (w, **L**, T), whose effect on the tape is to change the sequence `b F@r` to `T@b w`:
-      ∀(q,b)∈Q×Σ: δ'((δ(q, b), F), r) ⊇ δ'(δ'((q, T), b), w).
-4. In case of a halt rule for (r, F), require an NFA transition to the steady state (thus guaranteeing recognition): 
-   ∀q∈Q: δ'((q, F), r) ⊇ S.
-5. Finally, require the initial configuration not to be recognized: (q₀, A)∉F.
+    - In case of a right transition (f, r) ↦ (w, **R**, t), whose effect on the tape is to change the sequence `f>r` to `w t>`:
+      ∀q∈Q: δ'((q, f), r) ∋ (δ(q, w), t).
+    - In the above case, if r=0, there's also a transition from `f>$` (`f>` at the end of the visited tape) to `w t>$`, and we also require:
+      ∀q∈Q: (q, f) ∈ F ⟸ (δ(q, w), t) ∈ F.
+    - In case of a left transition (f, r) ↦ (w, **L**, t), whose effect on the tape is to change the sequence `s f>r` to `t>s w`:
+      ∀(q,s)∈Q×Σ: δ'((δ(q, s), f), r) ⊇ δ'(δ'((q, t), s), w).
+    - The above also has special cases at the edges of the visited tape: `^f>r` to `^t>0w`, `s f>$` to `t>s w$` if r=0, and `^f>$` to `^t>0 w$` if r=0.
+      We then require:
+      * δ'((q₀, f), r) ⊇ δ'(δ'((q₀, t), 0), w),
+      * ∀(q,s)∈Q×Σ: (δ(q, s), f) ∈ F ⟸ δ'(δ'((q, t), s), w) ∩ F ≠ ∅ if r=0.
+      * (q₀, f) ∈ F ⟸ δ'(δ'((q₀, t), 0), w) ∈ F if r=0.
+4. In case of a halt rule for (f, r), require an NFA transition to the steady state (thus guaranteeing recognition): 
+   ∀q∈Q: δ'((q, f), r) ⊇ S. If r=0, we require that `f>$` is recognized, i.e., Qx{f} ⊆ F.
+5. Finally, require the initial configuration not to be recognized: (q₀, `A`)∉F.
+
+Note: In case the DFA ignores leading zeros i.e, δ(q₀, 0) = q₀) and the NFA ignores trailing zeros (i.e., δ'(F, 0) = F),
+the rules about the four special-case transitions at the edges of the visited tape are redundant,
+and the "start"/"end" of the tape can be set at arbitrary points beyond any nonzero tape contents.
+Thus, one need not distinguish visisted and unvisited tape cells when working with leading-/trailing-zero-invariant automata.
+**The first first published version of this decider worked this way. Thus, independent verifier programs have assumed leading/trailing zero invariance.**
 
 ### Proof data format
 
-In a computer representation of the above, we number the DFA states, identifying q₀ with 0, and number the NFA states, identifying (q, F) with 5q+f
+In a computer representation of the above, we number the DFA states, identifying q₀ with 0, and number the NFA states, identifying (q, f) with 5q+f
 (in the BB(5) case, of course; and similarly for other values of 5.)
 
-We represent a DFA as a simple nested list, [[δ(0, 0), δ(0, 1)], [δ(1, 0), δ(1, 1)], …, [δ(n, 0), δ(n, 1)]].
+We represent a DFA as a simple nested list, [[δ(0, 0), δ(0, 1), …], [δ(1, 0), δ(1, 1), …], …, [δ(n, 0), δ(n, 1), …]].
 
-In a [Decider Verification File](https://github.com/TonyGuil/bbchallenge/blob/main/README), this is flattened to a sequence of 2n bytes.
+In a [Decider Verification File](https://github.com/TonyGuil/bbchallenge/blob/main/README), this is flattened to a sequence of |Σ|n bytes.
 
 To represent transitions, sets of accepted states, and sets of reachable states, we use a well-known
 [matrix characterization of automata](https://planetmath.org/matrixcharacterizationsofautomata):
@@ -154,7 +161,7 @@ In our [Decider Verification Files](https://github.com/TonyGuil/bbchallenge/blob
 - `DeciderType` = 10
 - `InfoLength` is variable, but corresponds to
 - `DeciderSpecificInfo` contains 1 byte for the direction (0 if as above the FSM is to scan left-to-right, 1 if reversed),
-  then 2n bytes for a DFA transition table as described above
+  then |Σ|n bytes for a DFA transition table as described above
 - Note that Tony Guilfoyle (the above repo's author) has both implemented an independent verifier, and specified a format variant (`DeciderType` = 11)
   where the decider info defines the full DFA+NFA proof.
 - Warning: The DVF format has an `nEntries` header. This decider operates in append mode and lets that become stale.
@@ -169,7 +176,7 @@ So, in full, the format of `output/finite_automata_reduction.dvf` is:
     - DeciderType: `uint32_t` (big-endian, always 10)
     - InfoLength: `uint32_t` (big-endian)
     - Direction: `uint8_t` (0 if the automaton reads left-to-right, 1 otherwise)
-    - TransitionTable: `uint8_t[InfoLength-1]` (entries `[δ(0, 0), δ(0, 1), δ(1, 0), δ(1, 1), …, [δ(n, 0), δ(n, 1)]]`, where `n = (InfoLength-1)/2`)
+    - TransitionTable: `uint8_t[InfoLength-1]` (entries `[δ(0, 0), δ(0, 1), …; δ(1, 0), δ(1, 1), …; …; δ(n, 0), δ(n, 1), …]`, where `n = (InfoLength-1)/|Σ|`)
 
 ## How it works: theory
 
@@ -205,36 +212,36 @@ Let L be a co-CTL for a TM.
 As mentioned in the "Proof Template" section — for a *tape* language to make sense we must require it to be (reverse) closed under TM transitions *and*
 invariant under zero-padding.
 
-Let \~ be the [left syntactic equivalence](https://en.wikipedia.org/wiki/Syntactic_monoid#Syntactic_equivalence) relation it induces on bit-strings.
+Let \~ be the [left syntactic equivalence](https://en.wikipedia.org/wiki/Syntactic_monoid#Syntactic_equivalence) relation it induces on tape-alphabet strings.
 
-Let `[u]` denote the \~-equivalence class of a bit-string u, and v be another bit-string.
+Let `[u]` denote the \~-equivalence class of a tape-string u, and v be another tape-string.
 
-Define TM/\~ as a machine with configurations `[u] S@v`, and transitions `[u] S@v` ↦ `[u'] S'@v'` for each valid TM step `0̅0 u S@v 0̅0` ↦ `0̅0 u S@v' 0̅0`.
+Define TM/\~ as a machine with configurations `[u] f>v`, and transitions `[u] f>v` ↦ `[u'] f'>v'` for each valid TM step `^u f>v$` ↦ `^u f>v'$`.
 
 Define halting for TM/\~ as for TM, and L(TM/\~) — the language TM/\~ accepts — to contain the configurations from which a halt is reachable.
 
-When we view the `[u] S@` as states and the `v` as a stack, [BEM97] says TM/\~ is a "pushdown system" and L(TM/\~) is recognized by a certain finite automaton.
+When we view the `[u] f>` as states and the `v` as a stack, [BEM97] says TM/\~ is a "pushdown system" and L(TM/\~) is recognized by a certain finite automaton.
 
-Thus, L' = { `u S@v` | TM/\~ may accept `[u] S@v 0^n` for some n } is a regular language we can recognize.
+Thus, L' = { `u f>v` | TM/\~ may accept `[u] f>v 0ⁿ` for some n } is a regular language we can recognize.
 
-L' is also a co-CTL: if it accepts `u S@v` after one step, then TM/\~ accepts it after one step (and zero-padding), so ditto before the one step, so L' accepts `u S@v`.
+L' is also a co-CTL: if it accepts `u f>v` after one step, then TM/\~ accepts it after one step (and zero-padding), so ditto before the one step, so L' accepts `u f>v`.
 
 L' accepts halting words. If L does too, then L'⊆L, so we've recovered an equal or finer co-CTL.
 
 ### Direct recognizer for L(TM/\~)
 While [BEM97] is a nice tool, it's helpful to derive the L(TM/\~) recognizer directly.
-So: let’s decide if a configuration starting with `[u] S@b₀` can lead to a halt, by considering how:
-it would via a finite transition sequence, which either reads the next bit b₁ at some point or first hits a halt-transition.
+So: let’s decide if a configuration starting with `[u] f>s₀` can lead to a halt, by considering how:
+it would via a finite transition sequence, which either reads the next symbol s₁ at some point or first hits a halt-transition.
 If the former is possible, that’s an unconditional yes;
-the latter is possible iff `[u] S@b₀v` may lead to some `[u'] S'@v` (via transitions which ignore the `v`) and `[u'] S@b₁b₂…` can lead to a halt.
+the latter is possible iff `[u] f>s₀v` may lead to some `[u'] f'>v` (via transitions which ignore the `v`) and `[u'] f>s₁s₂…` can lead to a halt.
 This gives an inductively defined recognizer, which operates as an NFA on the state space {HALT} ∪ Q×Q™.
 That last paragraph defines its transitions mathematically. We can make the definition effective by defining *them* inductively:
 
-* In case of a halt rule for (r, F): for any `[u]`, `[u] F@, r`↦`HALT` is an `r`-transition. (`HALT` simply transitions to itself.)
-* In case of a right transition (r, F) ↦ (w, **R**, T), whose effect on the tape is to change the sequence `F@r` to `w T@`:
-  for any `[u]`, `[u] F@, r`↦`[uw] T@` is an `r`-transition.
-* In case of a left transition (r, F) ↦ (w, **L**, T), whose effect on the tape is to change the sequence `b₀ F@r` to `T@b₀ w`:
-  whenever `[u] T@, b₀, w`↦`[u'] T'@` is a composition of `b₀`- and `w`-transitions, there’s an `r`-transition from `[ub₀] F@, r`↦`[u'] T'@`.
+* In case of a halt rule for (f, r): for any `[u]`, `[u] f>, r`↦`HALT` is an `r`-transition. (`HALT` simply transitions to itself.)
+* In case of a right transition (f, r) ↦ (w, **R**, t), whose effect on the tape is to change the sequence `f>r` to `w t>`:
+  for any `[u]`, `[u] f>, r`↦`[uw] t>` is an `r`-transition.
+* In case of a left transition (f, r) ↦ (w, **L**, t), whose effect on the tape is to change the sequence `s₀ f>r` to `t>s₀ w`:
+  whenever `[u] t>, s₀, w`↦`[u'] t'>` is a composition of `s₀`- and `w`-transitions, there’s an `r`-transition from `[ub₀] f>, r`↦`[u'] t'>`.
 
 To compute the recognizing NFA’s transition relation, we may close an initially empty relation under these rules.
 
@@ -247,10 +254,11 @@ This makes it a useful partner to the verifier, even if it's untrusted: if someo
 There is another finite state machine architecture to consider for a tape language recognizer, which is appealing because it's very simple:
 Any regular tape language remains regular when reversed.
 Thus, there exist DFAs recognizing the original and reversed language.
-If we delete everything except the `0`- and `1`-transitions, we get finite-state classifiers for the left and right halves of the tape (in both cases excluding the bit under the head).
+If we delete everything except the `s`-transitions for each tape-symbol `s`,
+we get finite-state classifiers for the left and right halves of the tape (in both cases excluding the symbol under the head).
 
 Here, too, we can consider the connection between DFAs and semantic equivalence:
-we see that any tape configuration's membership in the language is determined by what the left-tape DFA does, what the right-tape DFA does, and the head configuration (state and bit underneath).
+we see that any tape configuration's membership in the language is determined by what the left-tape DFA does, what the right-tape DFA does, and the head configuration (state and symbol underneath).
 
 If we define a finite-state recognizer which operates this way — runs both tape halves through a DFA, and checks this triple against an accepted set —
 we see that the relevant closure conditions are fairly easy to formulate.

@@ -1,14 +1,16 @@
 [package]
 name = "decider-finite-automata-reduction"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Justin Blanchard <UncombedCoconut@gmail.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [features]
+default = ["fix_zero"]
 # Decider direct-n only tries DFAs with a "sink" in the first 2^floor(log2(n)) states: big speedup, small false negative rate (raising the "n" needed to solve the TM).
 sink_heuristic = []
-# Deciders only search for automata that are insensitive to leading/trailing zeros.
+# Deciders only search for automata that are insensitive to leading/trailing zeros. Disabling this allows for shorter proofs in some cases.
+# Caution! The price is a severe speed penalty and incompatibility with .dvf-file verifiers designed for the original proof conditions.
 fix_zero = []
 # Double the bit-vector size to 128, allowing BB5 search depths up to 25.
 u128 = []
