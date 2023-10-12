@@ -124,16 +124,9 @@ impl DirectProver {
     /// given that `dfa` is known up to the `(q_new, s_new)` transition.
     /// The closure conditions for Move rules in the direction opposite our scan direction
     /// depend on the allowed NFA transitions, so this process repeats until there's nothing new.
-    fn saturate(
-        dfa: &DFA,
-        nfa: &mut NFA,
-        tm: &Machine,
-        a_dir: Side,
-        q_new: DFAState,
-        s_new: Symbol,
-    ) {
+    fn saturate(dfa: &DFA, nfa: &mut NFA, tm: &Machine, fwd: Side, q_new: DFAState, s_new: Symbol) {
         tm.rules().for_each(|rule| match rule {
-            Rule::Move { f, r, w, d, t } if d == a_dir && w == s_new => {
+            Rule::Move { f, r, w, d, t } if d == fwd && w == s_new => {
                 nfa.t[r as usize][nfa_start(q_new, f)] |= row(nfa_start(dfa.step(q_new, w), t));
             }
             _ => {}
@@ -141,7 +134,7 @@ impl DirectProver {
         loop {
             let mut grew = false;
             tm.rules().for_each(|rule| match rule {
-                Rule::Move { f, r, w, d, t } if d != a_dir => {
+                Rule::Move { f, r, w, d, t } if d != fwd => {
                     for q in 0..=q_new {
                         for s in 0..(SYMBOLS as Symbol) {
                             if (q, s) <= (q_new, s_new) {

@@ -30,10 +30,7 @@ mod tests {
 
     #[test]
     fn test_consistency() {
-        assert!(
-            (1..=10).contains(&SYMBOLS),
-            "Need tape alphabet with a 0 symbol and compatible with the standard text format"
-        );
+        assert!((1..=10).contains(&SYMBOLS), "need tape alphabet of digits");
         assert!(TMState::MAX as usize + 1 >= TM_STATES);
         assert!(DFAState::MAX as usize + 1 >= MAX_DFA);
         assert!(NFAState::MAX as usize + 1 >= MAX_NFA);
