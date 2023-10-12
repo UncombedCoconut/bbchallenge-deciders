@@ -1,13 +1,4 @@
-//! Define up the hard, compile-time limits on our `BB(_)` problem and search space.
-
-/// The size of a Turing machine's tape alphabet.
-pub const SYMBOLS: usize = 2;
-/// The exact number of states we expect from Turing Machines.
-pub const TM_STATES: usize = 5;
-/// The maximum number of states in a Proof's NFA.
-pub const MAX_NFA: usize = if cfg!(feature = "u128") { 128 } else { 64 };
-/// The maximum number of states in a Proof's DFA.
-pub const MAX_DFA: usize = MAX_NFA / TM_STATES;
+//! Define the hard, compile-time limits on our `BB(_)` problem and search space.
 
 /// A TM tape symbol.
 pub type Symbol = u8;
@@ -24,6 +15,15 @@ pub type NFAStateMask = u128;
 #[cfg(not(feature = "u128"))]
 pub type NFAStateMask = u64;
 
+/// The size of a Turing machine's tape alphabet.
+pub const SYMBOLS: usize = 2;
+/// The exact number of states we expect from Turing Machines.
+pub const TM_STATES: usize = 5;
+/// The maximum number of states in a Proof's NFA.
+pub const MAX_NFA: usize = NFAStateMask::BITS as usize;
+/// The maximum number of states in a Proof's DFA.
+pub const MAX_DFA: usize = MAX_NFA / TM_STATES;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -31,10 +31,10 @@ mod tests {
     #[test]
     fn test_consistency() {
         assert!((1..=10).contains(&SYMBOLS), "need tape alphabet of digits");
+        assert!(Symbol::MAX as usize + 1 >= SYMBOLS);
         assert!(TMState::MAX as usize + 1 >= TM_STATES);
         assert!(DFAState::MAX as usize + 1 >= MAX_DFA);
         assert!(NFAState::MAX as usize + 1 >= MAX_NFA);
-        assert!(NFAStateMask::BITS as usize >= MAX_NFA);
         assert!(MAX_DFA * TM_STATES <= MAX_NFA, "nfa_start values won't fit");
     }
 }
