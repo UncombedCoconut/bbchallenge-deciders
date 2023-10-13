@@ -33,8 +33,7 @@ impl Prover for DirectProver {
     }
 
     fn prove(&mut self, tm: &Machine) -> Option<Proof> {
-        self.prove_side(tm, Side::R)
-            .or_else(|| self.prove_side(tm, Side::L))
+        self.prove_side(tm, Side::R).or_else(|| self.prove_side(tm, Side::L))
     }
 }
 

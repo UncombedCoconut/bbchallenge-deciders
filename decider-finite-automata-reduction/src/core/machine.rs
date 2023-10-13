@@ -57,9 +57,7 @@ impl Display for Trans {
                 "{}{}{}",
                 self.sym,
                 if self.dir == 0 { 'R' } else { 'L' },
-                char::from_digit(self.new as u32 + 9, 36)
-                    .unwrap_or('?')
-                    .to_ascii_uppercase()
+                char::from_digit(self.new as u32 + 9, 36).unwrap_or('?').to_ascii_uppercase()
             )
         }
     }
@@ -99,17 +97,8 @@ impl Display for Side {
 /// An higher-level transition, as a tagged enum. Conventions: "f"rom, "r"ead, "t"o, "w"rite.
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum Rule {
-    Move {
-        f: TMState,
-        r: u8,
-        w: u8,
-        d: Side,
-        t: TMState,
-    },
-    Halt {
-        f: TMState,
-        r: u8,
-    },
+    Move { f: TMState, r: u8, w: u8, d: Side, t: TMState },
+    Halt { f: TMState, r: u8 },
 }
 
 impl Display for Rule {

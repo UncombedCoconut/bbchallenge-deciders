@@ -15,10 +15,7 @@ pub struct NFA {
 impl NFA {
     /// An NFA with n states (initialized empty transitions and acceptance).
     pub fn new(states: usize) -> NFA {
-        NFA {
-            t: core::array::from_fn(|_| Matrix::new(states)),
-            accepted: ColVector::new(),
-        }
+        NFA { t: core::array::from_fn(|_| Matrix::new(states)), accepted: ColVector::new() }
     }
 
     /// The number of states.

@@ -22,12 +22,7 @@ pub struct DFAPrefixIterator {
 
 impl DFAPrefixIterator {
     pub fn new(n: usize) -> Self {
-        Self {
-            dfa: DFA::new(n),
-            qs: 0,
-            tmax: vec![0; SYMBOLS * n + 1],
-            skip_current: false,
-        }
+        Self { dfa: DFA::new(n), qs: 0, tmax: vec![0; SYMBOLS * n + 1], skip_current: false }
     }
 
     pub fn skip_current_subtree(&mut self) {

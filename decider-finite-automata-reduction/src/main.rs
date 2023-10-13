@@ -160,10 +160,7 @@ fn process_ad_hoc(
         if unsolved_pos.is_empty() {
             break;
         }
-        for pos in unsolved_pos
-            .clone()
-            .into_iter()
-            .decider_progress_with(&progress, prover.name())
+        for pos in unsolved_pos.clone().into_iter().decider_progress_with(&progress, prover.name())
         {
             let tm = &tms[pos];
             if let Some(proof) = prover.prove(tm) {

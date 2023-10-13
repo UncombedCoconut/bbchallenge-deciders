@@ -27,12 +27,7 @@ impl Database {
     ) -> impl Iterator<Item = (MachineID, Machine)> + 'a {
         let mut reader = BufReader::new(&self.file);
         let pos = reader.stream_position().unwrap() as i64;
-        Reader {
-            reader,
-            ids,
-            bytes: [0u8; 6 * TM_STATES],
-            pos,
-        }
+        Reader { reader, ids, bytes: [0u8; 6 * TM_STATES], pos }
     }
 
     pub fn len(&self) -> usize {

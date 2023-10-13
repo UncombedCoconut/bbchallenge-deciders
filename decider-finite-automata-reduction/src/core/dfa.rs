@@ -11,9 +11,7 @@ pub struct DFA {
 impl DFA {
     /// A DFA with n states (initialized with all transitions leading to the initial state).
     pub fn new(n: usize) -> DFA {
-        DFA {
-            t: vec![[0; SYMBOLS]; n],
-        }
+        DFA { t: vec![[0; SYMBOLS]; n] }
     }
 
     /// The number of states.

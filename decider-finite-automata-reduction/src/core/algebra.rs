@@ -26,8 +26,7 @@ pub struct Matrix {
 pub struct IterBits(NFAStateMask);
 
 fn bits_from_iter<I: IntoIterator<Item = NFAState>>(iter: I) -> NFAStateMask {
-    iter.into_iter()
-        .fold(0 as NFAStateMask, |v, i| v | (1 as NFAStateMask) << i)
+    iter.into_iter().fold(0 as NFAStateMask, |v, i| v | (1 as NFAStateMask) << i)
 }
 
 /// Ensure mask uses only the first n bits.
@@ -176,9 +175,7 @@ impl FromIterator<NFAState> for RowVector {
 impl Matrix {
     /// An n x n matrix of zeros.
     pub fn new(n: usize) -> Matrix {
-        Matrix {
-            rows: vec![RowVector(0); n],
-        }
+        Matrix { rows: vec![RowVector(0); n] }
     }
 
     /// Ensure self is valid as an n x n matrix.
@@ -296,14 +293,8 @@ mod tests {
                 // distributive law
                 for i2 in 0 as NFAState..2 as NFAState {
                     for j2 in 0 as NFAState..2 as NFAState {
-                        assert_eq!(
-                            (row(i) | row(i2)) * col(j),
-                            row(i) * col(j) | row(i2) * col(j)
-                        );
-                        assert_eq!(
-                            row(i) * (col(j) | col(j2)),
-                            row(i) * col(j) | row(i) * col(j2)
-                        );
+                        assert_eq!((row(i) | row(i2)) * col(j), row(i) * col(j) | row(i2) * col(j));
+                        assert_eq!(row(i) * (col(j) | col(j2)), row(i) * col(j) | row(i) * col(j2));
                     }
                 }
             }

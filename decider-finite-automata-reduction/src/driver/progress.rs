@@ -51,11 +51,7 @@ impl DeciderProgress {
             .with_finish(ProgressFinish::Abandon);
         let for_index = multi.add(pb);
         for_index.enable_steady_tick(Duration::from_millis(500));
-        DeciderProgress {
-            multi,
-            for_index,
-            prover_style,
-        }
+        DeciderProgress { multi, for_index, prover_style }
     }
 
     pub fn prover_progress(&self, len: usize, name: impl Into<Cow<'static, str>>) -> ProgressBar {

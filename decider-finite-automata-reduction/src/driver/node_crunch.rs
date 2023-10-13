@@ -36,11 +36,7 @@ struct WorkStats {
 
 impl Default for WorkStats {
     fn default() -> Self {
-        Self {
-            target_size: 1,
-            last_send: Instant::now(),
-            todo: Vec::new(),
-        }
+        Self { target_size: 1, last_send: Instant::now(), todo: Vec::new() }
     }
 }
 
@@ -124,10 +120,8 @@ impl NCServer for Server {
         node_id: NodeID,
         node_data: &Self::ProcessedDataT,
     ) -> Result<(), NCError> {
-        let sent = self
-            .batches_out
-            .remove(&node_data.batch_id)
-            .ok_or(NCError::ServerMsgMismatch)?;
+        let sent =
+            self.batches_out.remove(&node_data.batch_id).ok_or(NCError::ServerMsgMismatch)?;
         self.stats.entry(node_id).and_modify(|s| {
             s.todo.retain(|&id| id != node_data.batch_id);
             let size_out = sent.ids.len();
@@ -248,12 +242,7 @@ impl NCNode for Node {
 }
 
 fn config_from_args(args: DeciderArgs) -> NCConfiguration {
-    NCConfiguration {
-        address: args.ip,
-        port: args.port,
-        compress: true,
-        ..Default::default()
-    }
+    NCConfiguration { address: args.ip, port: args.port, compress: true, ..Default::default() }
 }
 
 pub fn run_node(args: DeciderArgs, db: Database) {
@@ -261,12 +250,7 @@ pub fn run_node(args: DeciderArgs, db: Database) {
     let current_prover = None;
     let current_stage = 0;
     NCNodeStarter::new(config_from_args(args))
-        .start(Node {
-            db,
-            prover_names,
-            current_prover,
-            current_stage,
-        })
+        .start(Node { db, prover_names, current_prover, current_stage })
         .expect("Quit due to node error!");
 }
 

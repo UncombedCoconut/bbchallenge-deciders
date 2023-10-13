@@ -26,11 +26,7 @@ pub fn nfa_start(q: DFAState, f: TMState) -> NFAState {
 impl TapeAutomaton {
     /// A `TapeAutomaton` definition (yet to be validated).
     pub fn new(direction: Side, dfa: DFA, nfa: NFA) -> TapeAutomaton {
-        TapeAutomaton {
-            direction,
-            dfa,
-            nfa,
-        }
+        TapeAutomaton { direction, dfa, nfa }
     }
 
     /// Ensure the `TapeAutomaton` satisfies the invariants described in the class doc comments.
@@ -61,19 +57,14 @@ pub struct Proof {
 impl Proof {
     /// A purported proof that `tm` is non-halting -- validate()` confirms if it works.
     pub fn new(direction: Side, dfa: DFA, nfa: NFA, steady_state: RowVector) -> Proof {
-        Proof {
-            automaton: TapeAutomaton::new(direction, dfa, nfa),
-            steady_state,
-        }
+        Proof { automaton: TapeAutomaton::new(direction, dfa, nfa), steady_state }
     }
 
     /// Ensure the `Proof` satisfies the invariants described in the class doc comments.
     /// (Thus, no sequence of TM steps can lead from the starting TM configuration to a halt!)
     pub fn validate(&self, tm: &Machine) -> ProofResult<()> {
         self.automaton.validate()?;
-        self.automaton
-            .nfa
-            .check_accepted_steady_state(self.steady_state)?;
+        self.automaton.nfa.check_accepted_steady_state(self.steady_state)?;
         if row(nfa_start(0, 0)) * self.automaton.nfa.accepted {
             Err(BadProof::BadStart)
         } else {
@@ -82,10 +73,7 @@ impl Proof {
                     if self.closed(0, &rule) {
                         Ok(())
                     } else {
-                        Err(BadProof::NotClosed {
-                            q,
-                            rule: rule.clone(),
-                        })
+                        Err(BadProof::NotClosed { q, rule: rule.clone() })
                     }
                 })
             })
@@ -201,13 +189,7 @@ mod tests {
             proof.validate(&tm),
             Err(BadProof::NotClosed {
                 q: 0,
-                rule: Rule::Move {
-                    f: 2,
-                    r: 1,
-                    w: 0,
-                    d: Side::R,
-                    t: 3
-                }
+                rule: Rule::Move { f: 2, r: 1, w: 0, d: Side::R, t: 3 }
             })
         );
         proof.automaton.dfa.t[0][0] = 0;
@@ -215,10 +197,7 @@ mod tests {
         proof.automaton.nfa.t[1][0] = row(0);
         assert_eq!(
             proof.validate(&tm),
-            Err(BadProof::NotClosed {
-                q: 0,
-                rule: Rule::Halt { f: 0, r: 1 }
-            })
+            Err(BadProof::NotClosed { q: 0, rule: Rule::Halt { f: 0, r: 1 } })
         );
         proof.automaton.nfa.t[1][0] = row(10);
 
@@ -227,13 +206,7 @@ mod tests {
             proof.validate(&tm),
             Err(BadProof::NotClosed {
                 q: 0,
-                rule: Rule::Move {
-                    f: 4,
-                    r: 0,
-                    w: 1,
-                    d: Side::L,
-                    t: 2
-                }
+                rule: Rule::Move { f: 4, r: 0, w: 1, d: Side::L, t: 2 }
             })
         );
         proof.automaton.nfa.t[0][4] = row(7);
@@ -243,13 +216,7 @@ mod tests {
             proof.validate(&tm),
             Err(BadProof::NotClosed {
                 q: 0,
-                rule: Rule::Move {
-                    f: 0,
-                    r: 0,
-                    w: 1,
-                    d: Side::R,
-                    t: 1
-                }
+                rule: Rule::Move { f: 0, r: 0, w: 1, d: Side::R, t: 1 }
             })
         );
     }
