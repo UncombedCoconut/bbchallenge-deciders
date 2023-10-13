@@ -79,8 +79,7 @@ impl DirectProver {
                 // far more time than it loses on higher-depth re-searches.
                 initial_non_sink_states = std::cmp::min(initial_non_sink_states, q_new as usize);
                 if initial_non_sink_states == q_new as usize
-                    && (dfas.dfa.t[initial_non_sink_states][0] != q_new
-                        || s_new == 1 && dfas.dfa.t[initial_non_sink_states][1] != q_new)
+                    && (0..=s_new).any(|s| dfas.dfa.t[initial_non_sink_states][s as usize] != q_new)
                 {
                     initial_non_sink_states += 1;
                 }
