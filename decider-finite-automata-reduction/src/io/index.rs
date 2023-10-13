@@ -6,9 +6,9 @@ use itertools::{EitherOrBoth, Itertools};
 use std::fs::read;
 use std::io::{self, ErrorKind};
 use std::path::Path;
-use zerocopy::{BigEndian, LayoutVerified, U32};
+use zerocopy::{BigEndian, Ref, U32};
 
-type IndexFile<B> = LayoutVerified<B, [U32<BigEndian>]>;
+type IndexFile<B> = Ref<B, [U32<BigEndian>]>;
 
 /// A data structure for tracking which DB entries are previously unsolved machines.
 pub struct Index {

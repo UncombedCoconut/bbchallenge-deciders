@@ -6,10 +6,10 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use thiserror::Error;
-use zerocopy::{AsBytes, FromBytes};
+use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
 /// A low-level transition, as in https://bbchallenge.org/method#format
-#[derive(AsBytes, FromBytes, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(AsBytes, FromBytes, FromZeroes, Clone, Debug, Default, Eq, PartialEq)]
 #[repr(C)]
 struct Trans {
     sym: u8,
@@ -67,7 +67,16 @@ impl Display for Trans {
 
 /// A Turing machine definition, as in https://bbchallenge.org/method#format
 #[derive(
-    AsBytes, FromBytes, Clone, SerializeDisplay, DeserializeFromStr, Debug, Default, Eq, PartialEq,
+    AsBytes,
+    FromBytes,
+    FromZeroes,
+    Clone,
+    SerializeDisplay,
+    DeserializeFromStr,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
 )]
 #[repr(C)]
 pub struct Machine {
