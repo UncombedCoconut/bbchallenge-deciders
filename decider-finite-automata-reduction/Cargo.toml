@@ -21,7 +21,7 @@ lto = "thin"
 
 [dependencies]
 argh = "0.1.10"
-cat_solver = "0.1.0"
+cat_solver = "3.1.1"
 indicatif = "0.17.3"
 itertools = "0.10.5"
 node_crunch = { git = "https://github.com/willi-kappler/node_crunch" }

@@ -83,9 +83,9 @@ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "cat_solver"
-version = "0.1.0"
+version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f3a38f1dfd86ca926aecdbec195b8b6fc035118e41384ea3b21c8f3935fb5af"
+checksum = "a85b3ebf0e0e07e569609d6b8818347589c88654aba12640ef84084042774064"
 dependencies = [
  "cc",
 ]

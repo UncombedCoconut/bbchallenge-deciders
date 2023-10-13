@@ -118,6 +118,7 @@ impl MitMDFAProver {
 
     fn init(&mut self, tm: &Machine) -> Solver {
         let mut sat = Solver::new();
+        sat.reserve(self.tmax_eq_0[1][self.sizes[1] * SYMBOLS - 1]);
         sat.add_clause([TRUE]);
         // DFA transitions:
         for lr in 0..2 {
