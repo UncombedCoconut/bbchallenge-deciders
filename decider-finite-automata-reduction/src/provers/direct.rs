@@ -69,7 +69,6 @@ impl DirectProver {
         loop {
             let (q_new, s_new) = dfas.next()?;
             let ply = (SYMBOLS as Symbol * q_new + s_new + 1) as usize;
-            nfas[ply] = nfas[ply - 1].clone();
             if cfg!(feature = "sink_heuristic") {
                 // Heuristic: Nearly all solutions have a "sink state" transitioning only to itself,
                 // typically recognizing a pattern the TM never writes in its infinite lifetime.
@@ -88,6 +87,7 @@ impl DirectProver {
                     continue;
                 }
             }
+            nfas[ply] = nfas[ply - 1].clone();
             Self::saturate(&dfas.dfa, &mut nfas[ply], tm, direction, q_new, s_new);
             if row(nfa_start(0, 0)) * nfas[ply].accepted {
                 dfas.skip_current_subtree();
