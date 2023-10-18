@@ -1,7 +1,7 @@
 //! A Decider Verification File -- as in https://github.com/TonyGuil/bbchallenge.
 
 use super::MachineID;
-use crate::core::{Side, DFA};
+use crate::core::{Side, DFA, SYMBOLS};
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
@@ -27,7 +27,7 @@ impl DeciderVerificationFile {
 
     /// Mark the given machine as solved.
     pub fn insert(&mut self, id: MachineID, direction: Side, dfa: &DFA) -> io::Result<()> {
-        for int in [id, DECIDER_TYPE, (1 + 2 * dfa.len()) as u32] {
+        for int in [id, DECIDER_TYPE, (1 + SYMBOLS * dfa.len()) as u32] {
             self.out.write_all(&int.to_be_bytes())?;
         }
         let dir = match direction {
