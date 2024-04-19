@@ -47,7 +47,7 @@ impl Iterator for DFAPrefixIterator {
             // That's the case if doing otherwise would close the transition graph, early -- i.e.,
             // states `> tmax[qs]` exist and would become unreachable from ones `<= tmax[qs]`.
             // Case 2: no such restriction, so the lex-next table fills in a 0.
-            if self.tmax[self.qs] < m && self.qs == SYMBOLS * (self.tmax[self.qs] as usize) + 1 {
+            if self.tmax[self.qs] < m && self.qs + 1 == SYMBOLS * (self.tmax[self.qs] as usize + 1) {
                 self.dfa.t[q][s] = self.tmax[self.qs] + 1;
             } else {
                 self.dfa.t[q][s] = 0 as DFAState;
